@@ -1,0 +1,95 @@
+---
+title: "Annotations_ENSEMBL"
+output: html_document
+date: "2024-02-02"
+----
+
+
+#install packages
+install.packages("rio")
+install.packages("biomaRt")
+install.packages("tidyverse")
+install.packages("data.table")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("biomaRt")
+
+
+#LIBRARIES
+library(rio)
+library(biomaRt)
+library(tidyverse)
+library(data.table)
+library(openxlsx)
+library(readxl)
+library(dplyr)
+#Load in file for downregulated 
+data_down_micro <- read.csv(file.choose())
+
+#Load Ensembl Mart
+ensembl <- useEnsembl(biomart="ensembl", dataset="rnorvegicus_gene_ensembl")
+
+#Extract gene infro from ensembl mart
+gene_info <- getBM(attributes=c('ensembl_gene_id_version','ensembl_gene_id', 'chromosome_name','gene_biotype','description', 'transcript_length', 'external_gene_name'), mart = ensembl)
+#gene_info$hgnc_symbol <- ifelse(gene_info$hgnc_symbol == "", gene_info$ensembl_gene_id, gene_info$hgnc_symbol) #for humans
+
+#check for and remove dup genes in ensembl gene data that was imported
+gene_info[duplicated(gene_info$ensembl_gene_id),]
+gene_info <- gene_info %>% distinct(ensembl_gene_id, .keep_all = TRUE)
+gene_info[duplicated(gene_info$ensembl_gene_id),]
+
+#merge ensemble data onto our data (be gene symbol)
+data_down_micro <- left_join( x = data_down_micro , y = gene_info, join_by("genes" == "external_gene_name") )
+
+write.csv(data_down_micro, "ensembl_down_micro.csv")
+
+###GO analysis using cluster profiler
+
+install.packages("clusterProfiler")
+install.packages("org.Rn.eg.db")
+
+library(clusterProfiler)
+library(org.Rn.eg.db)
+
+genes_of_interest <- data_down_micro$ensembl_gene_id_version
+
+enrich_result <- enrichGO(gene = genes_of_interest,
+                           OrgDb = org.Rn.eg.db,
+                           keyType = "SYMBOL",
+                           ont = "BP",
+                           pAdjustMethod = "BH",
+                           qvalueCutoff = 0.05)
+
+head(enrich_result)
+
+###Write the csv for teh Goterms
+
+write.csv(enrich_result, "GO terms_down.csv")
+# View the top enriched GO terms
+head(enrich_result)
+
+# Plot the enrichment results
+dotplot(enrich_result)
+
+##FOR UPREGULATED GENES
+#Load in file
+data_up_micro <- read.csv(file.choose())
+
+#Load Ensembl Mart
+ensembl <- useEnsembl(biomart="ensembl", dataset="rnorvegicus_gene_ensembl")
+
+#Extract gene infro from ensembl mart
+gene_info <- getBM(attributes=c('ensembl_gene_id_version','ensembl_gene_id', 'chromosome_name','gene_biotype','description', 'transcript_length', 'external_gene_name'), mart = ensembl)
+#gene_info$hgnc_symbol <- ifelse(gene_info$hgnc_symbol == "", gene_info$ensembl_gene_id, gene_info$hgnc_symbol) #for humans
+
+#check for and remove dup genes in ensembl gene data that was imported
+gene_info[duplicated(gene_info$ensembl_gene_id),]
+gene_info <- gene_info %>% distinct(ensembl_gene_id, .keep_all = TRUE)
+gene_info[duplicated(gene_info$ensembl_gene_id),]
+
+#merge ensemble data onto our data (be gene symbol)
+data_up_micro <- left_join( x = data_up_micro , y = gene_info, join_by("genes" == "external_gene_name") )
+
+

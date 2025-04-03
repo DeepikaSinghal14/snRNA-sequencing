@@ -1,0 +1,74 @@
+---
+title: "pseudobulk DEseq"
+output: html_document
+date: "2024-01-22"
+---
+
+```{r}
+# Single-cell RNA-seq analysis - Pseudobulk DE analysis with DESeq2
+```
+```{r}
+# Read in the dataset
+sce <- readRDS("sex.combined.rds")
+```
+
+```{r}
+# Explore the raw counts for the dataset
+
+library(SingleCellExperiment)
+library(Seurat)
+
+```
+```{r}
+## Explore the cellular metadata for the dataset
+dim(colData(sce))
+
+head(colData(sce))
+```
+```{r}
+
+## Determine the number of cells per sample
+table(sce$orig.ident)
+```
+
+```{r}
+ #Perform QC if not already performed
+dim(sce)
+
+if (!requireNamespace("BiocManager", quietly=TRUE))
+    install.packages("BiocManager")
+BiocManager::install("scater")
+
+library(scater)
+# Calculate quality control (QC) metrics
+sce <- perCellQCMetrics(sce)
+
+```
+
+```{r}
+sex.combined[["RNA"]] <- split(sex.combined[["RNA"]], f = sex.combined$stressF)
+sex.combined <- SCTransform(sex.combined)
+sex.combined <- RunPCA(sex.combined)
+sex.combined <- RunUMAP(sex.combined, dims = 1:30)
+DimPlot(sex.combined, reduction = "umap", group.by = c("stressF", "seurat_clusters"))
+```
+```{r}
+# integrate datasets
+sex.combined <- IntegrateLayers(object = sex.combined, method = CCAIntegration, normalization.method = "SCT", verbose = F)
+sex.combined <- FindNeighbors(sex.combined, reduction = "integrated.dr", dims = 1:30)
+sex.combined <- FindClusters(sex.combined, resolution = 0.6)
+```
+```{r}
+sex.combined<- RunUMAP(sex.combined, dims = 1:30, reduction = "integrated.dr")
+DimPlot(sex.combined, reduction = "umap", group.by = c("stressF", "seurat_clusters"))
+```
+
+
+```{r}
+# perform differential expression
+sex.combined <- PrepSCTFindMarkers(sex.combined)
+sex.combined$celltype.stressF <- paste(sex.combined$seurat_clusters, sex.combined$stressF, sep = "_")
+Idents(sex.combined) <- "celltype.stressF"
+
+b.interferon.response <- FindMarkers(sex.combined, ident.1 = "2_CNTRL", ident.2 = "2_STRESS", verbose = FALSE)
+```
