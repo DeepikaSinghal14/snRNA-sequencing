@@ -1,0 +1,201 @@
+---
+title: "seurat_soupX"
+output: html_document
+date: "2024-01-11"
+---
+
+
+```{r}
+install.packages("Seurat")
+install.packages("cowplot")
+
+library(Seurat)
+library(cowplot)
+
+install.packages("SoupX")
+library(SoupX)
+```
+```{r}
+# Load data and estimate soup profile
+sc = load10X("/Volumes/Singhal SSD/cellranger_analysis/cellranger_analysis_1/outs")
+# Estimate rho
+sc = autoEstCont(sc)
+# Clean the data
+out1 = adjustCounts(sc)
+```
+
+
+```{r}
+sc = load10X('/Volumes/Singhal SSD/cellranger_analysis/cellranger_analysis_4/outs')
+sc = autoEstCont(sc)
+out4 = adjustCounts(sc)
+out4
+```
+
+```{r}
+sc = load10X('/Volumes/Singhal SSD/cellranger_analysis/cellranger_analysis_A/outs')
+sc = autoEstCont(sc)
+outA = adjustCounts(sc)
+```
+```{r}
+sc = load10X('/Volumes/Singhal SSD/cellranger_analysis/cellranger_analysis_B/outs')
+sc = autoEstCont(sc)
+outB = adjustCounts(sc)
+```
+
+```{r}
+### seurat using soup X output
+
+library(dplyr)
+library(Seurat)
+library(patchwork)
+
+
+
+sample1 <- CreateSeuratObject(counts = out1, project = "sample_1", min.cells = 3, min.features = 200)
+sample1
+sample4 <- CreateSeuratObject(counts = out2, project = "sample_1", min.cells = 3, min.features = 200)
+sample4
+sampleA <- CreateSeuratObject(counts = outA, project = "sample_1", min.cells = 3, min.features = 200)
+sampleA
+sampleB <- CreateSeuratObject(counts = outB, project = "sample_1", min.cells = 3, min.features = 200)
+sampleB
+
+```
+
+```{r}
+library(Seurat)
+library(cowplot)
+
+# Set up control object Female
+ctrlF <- CreateSeuratObject(counts = sample1.data, project = "Female_ctrl", min.cells = 5)
+ctrlF$stressF <- "CNTRL"
+ctrlF <- subset(ctrlF, subset = nFeature_RNA > 500)
+ctrlF <- NormalizeData(ctrlF, verbose = FALSE)
+ctrlF <- FindVariableFeatures(ctrlF, selection.method = "vst", nfeatures = 2000)
+```
+
+```{r}
+# Set up stressed object Female
+stressF <- CreateSeuratObject(counts = sample4.data, project = "Female_stress", min.cells = 5)
+stressF$stressF <- "STRESS"
+stressF <- subset(stressF, subset = nFeature_RNA > 500)
+stressF <- NormalizeData(stressF, verbose = FALSE)
+stressF <- FindVariableFeatures(stressF, selection.method = "vst", nfeatures = 2000)
+stressF[["percent.mt"]] <- PercentageFeatureSet(stressF, pattern = "^mt-")
+```
+```{r}
+# Visualize QC metrics as a violin plot
+VlnPlot(stressF, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+```
+
+
+```{r}
+# Set up stressed object Male
+stressM <- CreateSeuratObject(counts = sampleA.data, project = "Male_stress", min.cells = 5)
+stressM$stressM <- "STRESS"
+stressM <- subset(stressM, subset = nFeature_RNA > 500)
+stressM <- NormalizeData(stressM, verbose = FALSE)
+stressM <- FindVariableFeatures(stressM, selection.method = "vst", nfeatures = 2000)
+```
+
+```{r}
+ctrlM <- CreateSeuratObject(counts = sampleB.data, project = "Male_ctrl", min.cells = 5)
+ctrlM$stressM <- "CNTRL"
+ctrlM <- subset(ctrlM, subset = nFeature_RNA > 500)
+ctrlM <- NormalizeData(ctrlM, verbose = FALSE)
+ctrlM <- FindVariableFeatures(ctrlM, selection.method = "vst", nfeatures = 2000)
+```
+
+
+```{r}
+##perform intergartion
+sex.anchors <- FindIntegrationAnchors(object.list = list(ctrlF, stressF, stressM, ctrlM), dims = 1:20)
+
+sex.combined <- IntegrateData(anchorset = sex.anchors, dims = 1:20, k.weight = 50)
+```
+
+```{r}
+# The [[ operator can add columns to object metadata. This is a great place to stash QC stats
+
+sex.combined[["percent.mt"]] <- PercentageFeatureSet(sex.combined, pattern = "^MT-")
+```
+
+```{r}
+##Perform integration analysis
+
+DefaultAssay(sex.combined) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+sex.combined <- ScaleData(sex.combined, verbose = FALSE)
+sex.combined <- RunPCA(sex.combined, npcs = 30, verbose = FALSE)
+# t-SNE and Clustering
+sex.combined <- RunUMAP(sex.combined, reduction = "pca", dims = 1:20)
+sex.combined <- FindNeighbors(sex.combined, reduction = "pca", dims = 1:20)
+sex.combined <- FindClusters(sex.combined, resolution = 0.5)
+```
+
+```{r}
+sex.combined[["mitoRatio"]] <- PercentageFeatureSet(object = sex.combined, pattern = "^mt-")
+sex.combined[["mitoRatio"]] <- sex.combined@meta.data$mitoRatio / 100
+sex.combined[["mitoRatio"]]
+```
+ 
+
+```{r}a
+p1 <- DimPlot(sex.combined, reduction = "umap", group.by = "stressM")
+p2 <- DimPlot(sex.combined, reduction = "umap", label = TRUE)
+plot_grid(p1, p2)
+```
+
+```{r}
+DimPlot(sex.combined, reduction = "umap")
+```
+
+```{r}
+##identify the conserved cell types markers
+
+install.packages("BiocManager")
+BiocManager::install('multtest')
+install.packages('metap')
+install.packages("remotes")
+remotes::install_github("metaOmics/MetaDE")
+
+
+
+library(BiocManager)
+library(remotes)
+
+install.packages('devtools')
+devtools::install_github('immunogenomics/presto') 
+library(devtools)
+```
+
+```{r}
+DefaultAssay(sex.combined) <- "RNA"
+sex.combined <- JoinLayers(sex.combined)
+sex.combined
+nk.markers <- FindConservedMarkers(sex.combined, ident.1 = 2, grouping.var = "stressF", verbose = FALSE)
+head(nk.markers)
+```
+
+
+```{r}
+# find all markers of cluster 
+cluster.markers <- FindAllMarkers(sex.combined, only.pos = T)
+cluster.markers
+```
+
+```{r}
+p <- DimPlot(sex.combined, reduction = "umap", split.by = "stressF")
+plot_grid(p)
+```
+```{r}
+p <- DimPlot(sex.combined, reduction = "umap", split.by = "stressM")
+plot_grid(p)
+```
+
+```{r}
+sex.combined.markers <- FindAllMarkers(sex.combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25, assay='RNA')
+sex.combined.markers %>% group_by(cluster)
+```

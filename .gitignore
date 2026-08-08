@@ -1,0 +1,14 @@
+# Nextflow
+work/
+.nextflow/
+.nextflow.log*
+results/
+
+# R
+.Rhistory
+.RData
+.Rproj.user/
+*.rds
+
+# OS
+.DS_Store
