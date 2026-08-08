@@ -1,0 +1,15 @@
+.nextflow/
+.nextflow.log
+.nextflow_*
+.nextflow_conda/
+work/
+results/*
+!results/README.md
+data/*
+!data/README.md
+*.rds
+*.h5
+*.h5ad
+*.xlsx
+.Rhistory
+.Rproj.user/
